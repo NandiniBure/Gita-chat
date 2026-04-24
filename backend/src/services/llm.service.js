@@ -3,10 +3,6 @@ const axios = require("axios");
 // 🧠 Calls Ollama local LLM
 async function generateAnswer(context, question, history = []) {
   try {
-    // 🔹 Convert history into readable text (NO prompt changes)
-
-    console.log("--->",history);
-
     const historyText = history
       .map((msg) => {
         if (msg.role === "user") return `User: ${msg.text}`;

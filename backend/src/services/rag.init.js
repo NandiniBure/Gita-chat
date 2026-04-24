@@ -2,9 +2,9 @@ const fs = require("fs");
 const path = require("path");
 const { getChunks } = require("./chunk.service");
 const { getEmbedding } = require("./embedding.service");
+const supabase = require("../supabaseClient"); // ✅ your client
 
 async function initRAG() {
-  // ✅ async function
   try {
     console.log("🔄 Initializing RAG...");
 
@@ -13,33 +13,40 @@ async function initRAG() {
 
     const chunks = getChunks(rawData);
 
+    console.log("📦 Total chunks:", chunks.length);
     console.log("SAMPLE CHUNKS:");
     console.log(JSON.stringify(chunks.slice(0, 3), null, 2));
 
-    const vectorStore = [];
+    const batchSize = 10; // ⚡ adjust if needed
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
+    for (let i = 0; i < chunks.length; i += batchSize) {
+      const batch = chunks.slice(i, i + batchSize);
 
-      console.log(`⚡ Embedding chunk ${i + 1}/${chunks.length}`);
+      console.log(`⚡ Processing batch ${i / batchSize + 1}`);
 
-      const embedding = await getEmbedding(chunk.text); // ✅ NOW VALID
+      // 🔥 parallel embedding
+      const embeddings = await Promise.all(
+        batch.map((chunk) => getEmbedding(chunk.text))
+      );
 
-      if (!embedding) continue;
+      const records = batch
+        .map((chunk, idx) => ({
+          content: chunk.text,
+          metadata: chunk.metadata,
+          embedding: embeddings[idx],
+        }))
+        .filter((r) => r.embedding);
 
-      vectorStore.push({
-        embedding,
-        text: chunk.text,
-        metadata: chunk.metadata,
-      });
+      if (records.length === 0) continue;
+
+      const { error } = await supabase.from("documents").insert(records);
+
+      if (error) {
+        console.error("❌ Insert error:", error);
+      }
     }
 
-    fs.writeFileSync(
-      path.join(__dirname, "../data/vectorStore.json"),
-      JSON.stringify(vectorStore, null, 2)
-    );
-
-    console.log("✅ RAG Initialized & Stored!");
+    console.log("✅ RAG Initialized & Stored in Supabase!");
   } catch (err) {
     console.error("❌ RAG Init Error:", err);
   }
