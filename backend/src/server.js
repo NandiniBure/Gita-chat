@@ -7,7 +7,7 @@ require("dotenv").config();
 const supabase = require("./supabaseClient");
 const { initRAG } = require("./services/rag.init");
 const { getEmbedding } = require("./services/embedding.service");
-const { generateAnswer } = require("./services/llm.service");
+const { generateAnswer, streamAnswer } = require("./services/llm.service");
 
 const app = express();
 app.use(express.json());
@@ -37,6 +37,7 @@ async function startServer() {
     // -----------------------------
     // CHAT ROUTE
     // -----------------------------
+
     app.post("/chat", async (req, res) => {
       try {
         const { question } = req.body;
@@ -65,7 +66,7 @@ async function startServer() {
         const history = chatData?.messages || [];
 
         // -----------------------------
-        // CASUAL RESPONSE FLOW
+        // CASUAL RESPONSE FLOW (UNCHANGED)
         // -----------------------------
         if (isCasualMessage(question)) {
           const answer =
@@ -86,20 +87,15 @@ async function startServer() {
         }
 
         // -----------------------------
-        // RAG FLOW (SUPABASE VECTOR SEARCH)
+        // RAG FLOW (UNCHANGED)
         // -----------------------------
         const questionEmbedding = await getEmbedding(question);
 
-
-
-        // 🔥 Supabase vector search
         const { data: chunks, error } = await supabase.rpc("match_documents", {
           query_embedding: questionEmbedding,
           match_threshold: 0.3,
           match_count: 3,
         });
-
-    
 
         if (error) {
           console.error("Vector search error:", error);
@@ -107,7 +103,6 @@ async function startServer() {
 
         const topChunks = chunks || [];
 
-        // 🔥 build context from DB fields
         const context = topChunks
           .map(
             (c) =>
@@ -115,35 +110,64 @@ async function startServer() {
           )
           .join("\n\n");
 
-        const answer = await generateAnswer(context, question, history);
+        // =============================
+        // 🔥 STREAMING STARTS HERE
+        // =============================
 
-        // -----------------------------
-        // SAVE CHAT
-        // -----------------------------
-        const newMessages = [
-          ...history,
-          { role: "user", text: question },
-          { role: "assistant", text: answer },
-        ];
+        // 🔥 headers for streaming
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.setHeader("Transfer-Encoding", "chunked");
+        res.setHeader("Cache-Control", "no-cache");
+        res.flushHeaders();
 
-        await supabase.from("chats").upsert({
-          chat_id: chatId,
-          messages: newMessages,
+        const stream = await streamAnswer(context, question, history);
+
+        let fullAnswer = "";
+
+        stream.on("data", (chunk) => {
+          const lines = chunk.toString().split("\n").filter(Boolean);
+
+          for (const line of lines) {
+            try {
+              const parsed = JSON.parse(line);
+              const token = parsed.response || "";
+
+              fullAnswer += token;
+
+              res.write(token); // 🚀 send token
+            } catch (e) {
+              // ignore partial JSON
+            }
+          }
         });
 
-        // -----------------------------
-        // RESPONSE
-        // -----------------------------
-        res.json({
-          answer,
-          sources: topChunks.map((c) => c.metadata),
+        stream.on("end", async () => {
+          // -----------------------------
+          // SAVE CHAT (same logic)
+          // -----------------------------
+          const newMessages = [
+            ...history,
+            { role: "user", text: question },
+            { role: "assistant", text: fullAnswer },
+          ];
+
+          await supabase.from("chats").upsert({
+            chat_id: chatId,
+            messages: newMessages,
+          });
+
+          res.end(); // 🔥 close stream
+        });
+
+        stream.on("error", (err) => {
+          console.error("Stream error:", err);
+          res.end("Error");
         });
       } catch (err) {
         console.error("Chat error:", err);
         res.status(500).json({ error: "Something went wrong" });
       }
     });
-
     // -----------------------------
     // GET ALL CHATS
     // -----------------------------
@@ -152,7 +176,7 @@ async function startServer() {
         const { data, error } = await supabase
           .from("chats")
           .select("chat_id, updated_at, messages")
-          .order("updated_at", { ascending: false });
+          .order("updated_at", { ascending: true });
 
         if (error) {
           console.error(error);

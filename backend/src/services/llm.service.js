@@ -1,24 +1,28 @@
 const axios = require("axios");
 
-// 🧠 Calls Ollama local LLM
-async function generateAnswer(context, question, history = []) {
-  try {
-    const historyText = history
-      .map((msg) => {
-        if (msg.role === "user") return `User: ${msg.text}`;
-        if (msg.role === "assistant") return `Assistant: ${msg.text}`;
-        return "";
-      })
-      .join("\n");
+// 🧠 STREAMING LLM CALL
+async function streamAnswer(context, question, history = []) {
+  const historyText = history
+    .map((msg) => {
+      if (msg.role === "user") return `User: ${msg.text}`;
+      if (msg.role === "assistant") return `Assistant: ${msg.text}`;
+      return "";
+    })
+    .join("\n");
 
-    const response = await axios.post("http://localhost:11434/api/generate", {
+  const response = await axios({
+    method: "post",
+    url: "http://localhost:11434/api/generate",
+    responseType: "stream", // 🔥 IMPORTANT
+    data: {
       model: "mistral",
       temperature: 0.2,
+      stream: true, // 🔥 ENABLE STREAMING
 
       prompt: `
       ${historyText ? `CONVERSATION HISTORY:\n${historyText}\n\n` : ""}
       
-      You are a calm, wise person with deep knowledge of the Bhagavad Gita.
+          You are a calm, wise person with deep knowledge of the Bhagavad Gita.
       
       STRICT SCOPE RULE:
       You ONLY answer questions related to:
@@ -42,6 +46,7 @@ async function generateAnswer(context, question, history = []) {
       - Be concise but meaningful
       - If the question is emotional, respond with empathy and stay practical
       - Reference verses naturally (e.g., Chapter 2, Verse 47) only when genuinely relevant
+
       
       CONTEXT:
       ${context}
@@ -51,14 +56,10 @@ async function generateAnswer(context, question, history = []) {
       
       ANSWER:
       `,
-      stream: false,
-    });
+    },
+  });
 
-    return response.data.response;
-  } catch (err) {
-    console.error("LLM Error:", err.message);
-    return "Sorry, I couldn't generate a response right now.";
-  }
+  return response.data; // 🔥 this is a stream
 }
 
-module.exports = { generateAnswer };
+module.exports = { streamAnswer };
