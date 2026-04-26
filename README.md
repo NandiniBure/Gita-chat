@@ -47,45 +47,45 @@ An AI-powered chatbot that provides spiritual guidance and answers from the *Bha
 
 ---
 
-## ⚙️ Installation
+### ⚙️ Installation
 
-# 1. Clone the repository
+## 1. Clone the repository
 git clone https://github.com/your-username/gita-chat.git
 cd gita-chat
 
-# 2. Install backend dependencies
+## 2. Install backend dependencies
 cd backend
 npm install
 
-# 3. Install frontend dependencies
+## 3. Install frontend dependencies
 cd ../frontend
 npm install
 
-# 4. Install & setup Ollama (if not installed)
-# Visit: https://ollama.com
+## 4. Install & setup Ollama (if not installed)
+### Visit: https://ollama.com
 
-# Pull a model (choose one)
+## Pull a model (choose one)
 ollama pull llama3
-# or
+## or
 ollama pull mistral
 
-# Start Ollama server
+## Start Ollama server
 ollama serve
 
-# 5. Setup environment variables
-# Create a .env file inside backend/
+## 5. Setup environment variables
+## Create a .env file inside backend/
 
 echo "OLLAMA_BASE_URL=http://localhost:11434
 MODEL=llama3
 PORT=5000" > backend/.env
 
-# 6. Run backend
+## 6. Run backend
 cd backend
 npm run dev
 
-# 7. Run frontend
+## 7. Run frontend
 cd ../frontend
 npm run dev
 
-# App will be running at:
-# http://localhost:3000
+## App will be running at:
+## http://localhost:8080
